@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Neutral bookmark-style motif in crimson; no copyrighted art. -->
+    <path
+        android:fillColor="#B8162C"
+        android:pathData="M40,30 L68,30 L68,78 L54,68 L40,78 Z" />
+    <path
+        android:fillColor="#E6E1D7"
+        android:pathData="M46,42 L62,42 L62,46 L46,46 Z" />
+    <path
+        android:fillColor="#E6E1D7"
+        android:pathData="M46,52 L62,52 L62,56 L46,56 Z" />
+</vector>
