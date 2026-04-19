@@ -26,14 +26,14 @@ No copyrighted art, logos, or branded assets are used. Game terms appear as labe
 
 ## Quickstart
 
-Requires Node 18+ and pnpm (npm / yarn also work).
+Requires Node 18+ and npm.
 
 ```bash
-pnpm install
-pnpm dev           # http://localhost:3000
-pnpm typecheck
-pnpm test
-pnpm build         # static export to ./out
+npm install
+npm run dev         # http://localhost:3000
+npm run typecheck
+npm test
+npm run build       # static export to ./out
 ```
 
 ## Project layout
@@ -118,7 +118,7 @@ No trademarked names, logos, or art from White Wolf / Renegade Game Studios / Pa
 Issues and pull requests are welcome. Please:
 
 1. Open an issue describing the change before large work.
-2. Keep PRs focused and run `pnpm typecheck && pnpm test` before submitting.
+2. Keep PRs focused and run `npm run typecheck && npm test` before submitting.
 3. Match the existing code style — no new tools or dependencies without discussion.
 
 ## Disclaimer
