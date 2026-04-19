@@ -37,3 +37,13 @@ Thumbs.db
 .turbo/
 .cache/
 tsconfig.tsbuildinfo
+
+# Android / Gradle (android/ branch)
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/captures/
+android/.externalNativeBuild/
+android/.cxx/
+*.iml
