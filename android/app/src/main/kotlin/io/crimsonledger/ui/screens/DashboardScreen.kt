@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -50,9 +51,13 @@ fun DashboardScreen(
     onOpenImport: () -> Unit,
     onExportAll: () -> Unit,
 ) {
-    val profiles by viewModel.profiles.collectAsState()
+    val allProfiles by viewModel.profiles.collectAsState()
     var createOpen by remember { mutableStateOf(false) }
     var overflow by remember { mutableStateOf(false) }
+    var showArchived by remember { mutableStateOf(false) }
+
+    val profiles = if (showArchived) allProfiles else allProfiles.filterNot { it.archived }
+    val archivedCount = allProfiles.count { it.archived }
 
     Scaffold(
         topBar = {
@@ -63,6 +68,17 @@ fun DashboardScreen(
                         Icon(Icons.Default.MoreVert, contentDescription = "More")
                     }
                     DropdownMenu(expanded = overflow, onDismissRequest = { overflow = false }) {
+                        if (archivedCount > 0) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        if (showArchived) "Hide archived ($archivedCount)"
+                                        else "Show archived ($archivedCount)"
+                                    )
+                                },
+                                onClick = { overflow = false; showArchived = !showArchived },
+                            )
+                        }
                         DropdownMenuItem(text = { Text("Import JSON") }, onClick = {
                             overflow = false; onOpenImport()
                         })
@@ -129,7 +145,17 @@ private fun EmptyDashboard(padding: PaddingValues, onCreate: () -> Unit) {
 private fun ProfileCard(profile: Profile, onClick: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-            Text(profile.name, style = MaterialTheme.typography.titleLarge)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(profile.name, style = MaterialTheme.typography.titleLarge)
+                if (profile.archived) {
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "ARCHIVED",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             profile.chronicle?.let {
                 Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             }

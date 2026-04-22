@@ -9,7 +9,6 @@ import io.crimsonledger.domain.Condition
 import io.crimsonledger.domain.CustomTracker
 import io.crimsonledger.domain.CustomTrackerDisplay
 import io.crimsonledger.domain.DamageKind
-import io.crimsonledger.domain.DamageTrack
 import io.crimsonledger.domain.Profile
 import io.crimsonledger.domain.adjustDamage
 import io.crimsonledger.domain.clamp
@@ -52,6 +51,8 @@ class LedgerViewModel(private val repo: LedgerRepository) : ViewModel() {
 
     fun profileFlow(id: String) = repo.observeProfile(id)
 
+    // --- Structural changes (snackbar-undoable) ------------------------------
+
     fun createProfile(name: String, chronicle: String? = null) {
         val profile = createDefaultProfile(
             id = UUID.randomUUID().toString(),
@@ -64,19 +65,11 @@ class LedgerViewModel(private val repo: LedgerRepository) : ViewModel() {
         }
     }
 
-    fun updateProfile(updated: Profile, snapshotBefore: Profile? = null) {
-        viewModelScope.launch {
-            val original = snapshotBefore ?: repo.findProfile(updated.id)
-            original?.let { snapshot(it, wasPresent = true) }
-            repo.upsert(updated.copy(updatedAt = System.currentTimeMillis()))
-        }
-    }
-
-    fun rename(id: String, name: String, chronicle: String?) = mutate(id) {
+    fun rename(id: String, name: String, chronicle: String?) = mutate(id, snapshot = true) {
         it.copy(name = name.trim().ifBlank { it.name }, chronicle = chronicle?.trim()?.takeIf { c -> c.isNotEmpty() })
     }
 
-    fun setArchived(id: String, archived: Boolean) = mutate(id) { it.copy(archived = archived) }
+    fun setArchived(id: String, archived: Boolean) = mutate(id, snapshot = true) { it.copy(archived = archived) }
 
     fun duplicate(id: String) {
         viewModelScope.launch {
@@ -101,39 +94,56 @@ class LedgerViewModel(private val repo: LedgerRepository) : ViewModel() {
         }
     }
 
-    fun setHunger(id: String, thirst: Int) = mutate(id) { it.copy(thirst = clamp(thirst, 0, 5)) }
+    // --- Fast in-session changes (no snackbar) -------------------------------
 
-    fun setHumanity(id: String, morality: Int) = mutate(id) { it.copy(morality = clamp(morality, 0, 10)) }
+    fun setHunger(id: String, thirst: Int) = mutate(id, snapshot = false) {
+        it.copy(thirst = clamp(thirst, 0, 5))
+    }
 
-    fun setStains(id: String, marks: Int) = mutate(id) { it.copy(marks = clamp(marks, 0, 10)) }
+    fun setHumanity(id: String, morality: Int) = mutate(id, snapshot = false) {
+        it.copy(morality = clamp(morality, 0, 10))
+    }
 
-    fun setHealthMax(id: String, max: Int) = mutate(id) { p ->
+    fun setStains(id: String, marks: Int) = mutate(id, snapshot = false) {
+        it.copy(marks = clamp(marks, 0, 10))
+    }
+
+    fun setHealthMax(id: String, max: Int) = mutate(id, snapshot = false) { p ->
         p.copy(health = clampTrack(p.health.copy(max = max)))
     }
 
-    fun setWillpowerMax(id: String, max: Int) = mutate(id) { p ->
+    fun setWillpowerMax(id: String, max: Int) = mutate(id, snapshot = false) { p ->
         p.copy(willpower = clampTrack(p.willpower.copy(max = max)))
     }
 
-    fun cycleHealth(id: String, index: Int) = mutate(id) { it.copy(health = cycleAt(it.health, index)) }
+    fun cycleHealth(id: String, index: Int) = mutate(id, snapshot = false) {
+        it.copy(health = cycleAt(it.health, index))
+    }
 
-    fun cycleWillpower(id: String, index: Int) = mutate(id) { it.copy(willpower = cycleAt(it.willpower, index)) }
+    fun cycleWillpower(id: String, index: Int) = mutate(id, snapshot = false) {
+        it.copy(willpower = cycleAt(it.willpower, index))
+    }
 
-    fun adjustHealth(id: String, kind: DamageKind, delta: Int) = mutate(id) {
+    fun adjustHealth(id: String, kind: DamageKind, delta: Int) = mutate(id, snapshot = false) {
         it.copy(health = adjustDamage(it.health, kind, delta))
     }
 
-    fun adjustWillpower(id: String, kind: DamageKind, delta: Int) = mutate(id) {
+    fun adjustWillpower(id: String, kind: DamageKind, delta: Int) = mutate(id, snapshot = false) {
         it.copy(willpower = adjustDamage(it.willpower, kind, delta))
     }
 
-    fun clearHealth(id: String) = mutate(id) { it.copy(health = clearDamage(it.health)) }
-    fun clearWillpower(id: String) = mutate(id) { it.copy(willpower = clearDamage(it.willpower)) }
+    // "Clear damage" is a destructive sweep — treat as structural.
+    fun clearHealth(id: String) = mutate(id, snapshot = true) { it.copy(health = clearDamage(it.health)) }
+    fun clearWillpower(id: String) = mutate(id, snapshot = true) { it.copy(willpower = clearDamage(it.willpower)) }
+
+    fun setShortNotes(id: String, notes: String) = mutate(id, snapshot = false) { it.copy(shortNotes = notes) }
+
+    // --- Conditions ---------------------------------------------------------
 
     fun addCondition(id: String, label: String, note: String? = null) {
         val cleaned = label.trim()
         if (cleaned.isEmpty()) return
-        mutate(id) { p ->
+        mutate(id, snapshot = true) { p ->
             val condition = Condition(UUID.randomUUID().toString(), cleaned, note?.trim()?.takeIf { it.isNotEmpty() })
             p.copy(conditions = p.conditions + condition)
         }
@@ -141,34 +151,39 @@ class LedgerViewModel(private val repo: LedgerRepository) : ViewModel() {
         _recentConditions.value = (listOf(cleaned) + current.filterNot { it.equals(cleaned, ignoreCase = true) }).take(12)
     }
 
-    fun removeCondition(profileId: String, conditionId: String) = mutate(profileId) { p ->
+    fun removeCondition(profileId: String, conditionId: String) = mutate(profileId, snapshot = true) { p ->
         p.copy(conditions = p.conditions.filterNot { it.id == conditionId })
     }
 
-    fun upsertCustomTracker(profileId: String, tracker: CustomTracker) = mutate(profileId) { p ->
-        val existing = p.customTrackers.indexOfFirst { it.id == tracker.id }
-        val list = if (existing >= 0) p.customTrackers.toMutableList().also { it[existing] = tracker }
-        else p.customTrackers + tracker
-        p.copy(customTrackers = list)
-    }
+    // --- Custom trackers ----------------------------------------------------
+
+    /** Value updates during play — no snackbar. */
+    fun updateCustomTrackerValue(profileId: String, tracker: CustomTracker) =
+        mutate(profileId, snapshot = false) { p ->
+            val idx = p.customTrackers.indexOfFirst { it.id == tracker.id }
+            if (idx < 0) p
+            else p.copy(customTrackers = p.customTrackers.toMutableList().also { it[idx] = tracker })
+        }
 
     fun addCustomTracker(profileId: String, label: String, display: CustomTrackerDisplay, max: Int?) {
         val cleaned = label.trim()
         if (cleaned.isEmpty()) return
-        upsertCustomTracker(profileId, CustomTracker(
-            id = UUID.randomUUID().toString(),
-            label = cleaned,
-            currentValue = 0,
-            maxValue = max,
-            displayType = display,
-        ))
+        mutate(profileId, snapshot = true) { p ->
+            p.copy(customTrackers = p.customTrackers + CustomTracker(
+                id = UUID.randomUUID().toString(),
+                label = cleaned,
+                currentValue = 0,
+                maxValue = max,
+                displayType = display,
+            ))
+        }
     }
 
-    fun removeCustomTracker(profileId: String, trackerId: String) = mutate(profileId) { p ->
+    fun removeCustomTracker(profileId: String, trackerId: String) = mutate(profileId, snapshot = true) { p ->
         p.copy(customTrackers = p.customTrackers.filterNot { it.id == trackerId })
     }
 
-    fun setShortNotes(id: String, notes: String) = mutate(id) { it.copy(shortNotes = notes) }
+    // --- Import / Export ----------------------------------------------------
 
     fun exportAll(): String = LedgerJson.encode(profiles.value)
 
@@ -186,9 +201,12 @@ class LedgerViewModel(private val repo: LedgerRepository) : ViewModel() {
                     repo.merge(reidentified)
                 }
             }
+            // No snapshot for imports — the previous world is too large to restore cleanly.
             _undo.value = null
         }
     }
+
+    // --- Undo ---------------------------------------------------------------
 
     fun performUndo() {
         val snap = _undo.value ?: return
@@ -201,16 +219,20 @@ class LedgerViewModel(private val repo: LedgerRepository) : ViewModel() {
 
     fun dismissUndo() { _undo.value = null }
 
-    private fun mutate(id: String, transform: (Profile) -> Profile) {
+    // --- Internals ----------------------------------------------------------
+
+    private fun mutate(id: String, snapshot: Boolean, transform: (Profile) -> Profile) {
         viewModelScope.launch {
             val current = repo.findProfile(id) ?: return@launch
-            snapshot(current, wasPresent = true)
+            if (snapshot) takeSnapshot(current, wasPresent = true)
             val next = transform(current).copy(updatedAt = System.currentTimeMillis())
             repo.upsert(next)
         }
     }
 
-    private fun snapshot(profile: Profile, wasPresent: Boolean) {
+    private fun snapshot(profile: Profile, wasPresent: Boolean) = takeSnapshot(profile, wasPresent)
+
+    private fun takeSnapshot(profile: Profile, wasPresent: Boolean) {
         _undo.value = UndoSnapshot(profile = profile, wasPresent = wasPresent, takenAt = System.currentTimeMillis())
     }
 
