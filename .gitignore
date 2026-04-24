@@ -1,23 +1,5 @@
-# Dependencies
-node_modules/
-.pnp/
-.pnp.js
-
-# Build output
-.next/
-out/
-dist/
-build/
-
-# Testing
-coverage/
-.vitest-cache/
-
 # Logs
 *.log
-npm-debug.log*
-yarn-debug.log*
-pnpm-debug.log*
 
 # Env
 .env
@@ -32,13 +14,9 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+*.iml
 
-# Misc
-.turbo/
-.cache/
-tsconfig.tsbuildinfo
-
-# Android / Gradle (android/ branch)
+# Android / Gradle
 android/.gradle/
 android/build/
 android/app/build/
@@ -46,4 +24,3 @@ android/local.properties
 android/captures/
 android/.externalNativeBuild/
 android/.cxx/
-*.iml

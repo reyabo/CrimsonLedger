@@ -1,11 +1,9 @@
 # Crimson Ledger — Android
 
-Native **Kotlin / Jetpack Compose** port of the web app. It lives on a
-long-lived `android` branch of the main `CrimsonLedger` repo so the web build
-on `main` stays untouched and cross-merges remain conflict-free — all Android
-code is self-contained under this folder.
+Native **Kotlin / Jetpack Compose** session tracker. This is the whole
+project — `main` is Android-only.
 
-## Feature parity with v1 web
+## Feature summary
 
 - Multiple profiles (create, rename, duplicate, archive/unarchive, delete)
 - Hunger (0–5)
@@ -14,7 +12,7 @@ code is self-contained under this folder.
 - Conditions as chips with recent-label autocomplete
 - Custom trackers (counter, pips, checklist)
 - Short notes scratchpad, debounced write-back
-- Single-step snackbar undo with 15 s TTL
+- Single-step snackbar undo with 15 s TTL on structural changes
 - JSON import/export (Storage Access Framework) with replace / merge modes
 - Dark-first Material 3 theme (ink/bone/crimson palette)
 
@@ -31,9 +29,6 @@ code is self-contained under this folder.
 | Min / Target SDK | 26 / 35 |
 
 ## Build & run
-
-The sandbox that generated this scaffold does **not** have the Android SDK, so
-you'll build locally:
 
 1. Install Android Studio Ladybug (AGP 8.7 requires JDK 17).
 2. Open the `android/` folder as the Gradle project root.
@@ -63,7 +58,7 @@ android/
 │       ├── kotlin/io/crimsonledger/
 │       │   ├── CrimsonLedgerApp.kt         # Application; owns the repository
 │       │   ├── MainActivity.kt             # Compose host, SAF import/export wiring
-│       │   ├── domain/                     # Pure Kotlin — mirrors web /src/domain
+│       │   ├── domain/                     # Pure Kotlin rules engine
 │       │   │   ├── Model.kt                # Profile, DamageTrack, Condition, …
 │       │   │   ├── Rules.kt                # clamp, cycleAt, adjustDamage, severity
 │       │   │   ├── Labels.kt               # V5 UI strings
@@ -76,7 +71,6 @@ android/
 │       │   │   ├── theme/                  # Color + Theme
 │       │   │   ├── components/             # Pip, PipRow, HungerTrack, HumanityTrack, …
 │       │   │   └── screens/                # DashboardScreen, ProfileScreen
-│       │   └── ui/…
 │       └── res/                            # themes, colors, adaptive icon, backup rules
 ├── build.gradle.kts                        # plugin aliases
 ├── settings.gradle.kts                     # repo + :app module
@@ -87,53 +81,37 @@ android/
 
 ## Design notes
 
-- The engine (everything under `domain/`) is pure Kotlin — no Android types.
-  It mirrors `src/domain/*` from the web app so rule changes only need to land
-  in both places.
-- V5 terminology (`Hunger`, `Humanity`, `Stains`) lives in `Labels.kt`. The
-  storage layer uses the generic names (`thirst`, `morality`, `marks`) so the
-  engine stays reusable if we add other preset systems later.
+- The engine (everything under `domain/`) is pure Kotlin — no Android
+  types. That keeps rules trivially testable on the JVM and reusable if
+  you ever wire up a different UI layer.
+- V5 terminology (`Hunger`, `Humanity`, `Stains`) lives in `Labels.kt`.
+  The storage layer uses the generic names (`thirst`, `morality`,
+  `marks`), so the engine stays preset-agnostic.
 - The single `profiles` Room table serialises `conditions` and
-  `customTrackers` as JSON columns via `LedgerConverters`. We always read a
-  profile whole, so normalising those lists would buy nothing and cost us
-  transactional rewrites.
-- Undo keeps one snapshot of the last mutated profile (or a "was absent"
-  marker for creates). The snackbar restores it within 15 s; after that it's
-  dropped.
-- Import is SAF-based and surfaces a `Replace all` / `Merge` dialog matching
-  the web envelope (`{ version: 1, exportedAt, profiles }`).
-- Export uses `CreateDocument`/`OpenDocument` so it plays nicely with
-  scoped storage; no runtime storage permission is needed.
-
-## Why a branch, not a fork
-
-- One license, one issue tracker, one changelog.
-- Shared domain logic reference between web TS and Kotlin — PRs can update
-  both sides together.
-- The entire Android project is under `android/` so merges from `main` (web
-  changes) never touch Android files.
-
-## Cross-merge ritual
-
-When web changes land on `main` (rule tweaks, schema version bumps, new
-features worth mirroring), pull them into `android`:
-
-```bash
-git checkout android
-git fetch origin
-git merge --no-ff origin/main
-# Conflicts should be impossible: all Android code lives under android/,
-# all web code lives at the repo root. If you see one, something moved —
-# resolve it deliberately and note it in the merge commit.
-./gradlew :app:testDebugUnitTest
-git push origin android
-```
-
-Going the other direction (Android → main) is almost never needed; the web
-app doesn't depend on anything under `android/`.
+  `customTrackers` as JSON columns via `LedgerConverters`. We always read
+  a profile whole, so normalising those lists would buy nothing and cost
+  us transactional rewrites.
+- Undo keeps one snapshot of the last mutated profile (or a
+  "was absent" marker for creates) only for structural changes —
+  create, rename, duplicate, archive/unarchive, delete, condition
+  add/remove, custom tracker add/remove, clear damage. Rapid in-play
+  changes (pip cycles, hunger/humanity/stain nudges, tracker value
+  updates, notes) are intentionally not snackbar-worthy.
+- Import is SAF-based and surfaces a `Replace all` / `Merge` dialog.
+- Export uses `CreateDocument` so it plays nicely with scoped storage;
+  no runtime storage permission is needed.
 
 ## CI
 
 `.github/workflows/android.yml` runs `./gradlew :app:testDebugUnitTest
-:app:assembleDebug` on pushes and PRs that touch `android/`. The debug APK
-is uploaded as an artifact on every successful run.
+:app:assembleDebug` on pushes to `main` and on PRs, whenever `android/`
+or the workflow file itself changes. On failure the workflow distills
+Kotlin `e:` lines and the Gradle `FAILURE` block into the step summary
+and — for push events — posts them as a PR comment. Successful runs
+upload the debug APK as an artifact.
+
+## History
+
+Early commits show the repo briefly hosted an offline-first Next.js PWA
+alongside the native build. The web code is preserved on the
+`web-archive` branch; `main` is Android-only.

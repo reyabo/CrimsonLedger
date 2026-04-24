@@ -1,105 +1,67 @@
 # Crimson Ledger
 
-A lightweight tracker for **Vampire: The Masquerade**-style sessions, focused on rapidly changing character stats like Hunger, Humanity, Health, Willpower, Stains, and other temporary in-game values. Crimson Ledger is deliberately **not** a full character sheet — it exists for the numbers that move at the table.
+A lightweight **native Android** tracker for **Vampire: The Masquerade**–style sessions, focused on the values that move at the table: Hunger, Humanity, Stains, Health, Willpower, conditions, and user-defined trackers. Crimson Ledger is deliberately **not** a full character sheet — it exists for the numbers that change during play.
 
-- Dark, gothic, mobile-first UI
-- Offline-first, installable as a PWA
-- Local storage only (your data never leaves your device in v1)
-- TypeScript, React, Next.js, Tailwind, zustand
+- Dark, gothic, mobile-first Material 3 UI
+- Offline-only, Room-backed local storage
+- Kotlin 2.0 + Jetpack Compose
 - GPL-3.0 licensed
 
-No copyrighted art, logos, or branded assets are used. Game terms appear as labels only; the underlying engine uses neutral names so it can be adapted to other systems.
+No copyrighted art, logos, or branded assets are used. V5 game terms appear as UI labels only; the underlying engine uses neutral names (`thirst`, `morality`, `marks`) so it can be relabeled for other systems.
 
 ## Features (v1)
 
-- **Multiple profiles** — create, edit, duplicate, archive, delete
+- **Multiple profiles** — create, rename, duplicate, archive, delete
 - **Pip tracks** — V5-style tap-to-cycle for Health and Willpower (empty → superficial → aggravated → empty) with a `+/-` alt panel
 - **Hunger**, **Humanity** (with **Stains** overlaid on the same 10-dot track)
-- **Conditions** as chips, with autocomplete from recent labels
-- **Custom trackers** — counter, pips, or checklist; for blood surges, stored vitae, boons, house-rule anything
+- **Conditions** as chips with autocomplete from recent labels
+- **Custom trackers** — counter, pips, or checklist
 - **Session notes** — short scratchpad, not a journal
-- **Single-step undo** for the last change (15 s window)
-- **JSON import / export** — per profile or the whole ledger
+- **Single-step undo** for structural changes (15 s window)
+- **JSON import / export** — SAF-based, per profile or whole ledger
 - **Critical-state warnings** — Impaired, Torpor, Degeneration risk
-- **Offline PWA** — installable, works with no network at the table
-- **Keyboard shortcuts** on desktop (`h`/`Shift+H` for Hunger, `Ctrl/Cmd+Z` for Undo)
 
-## Quickstart
+## Build & run
 
-Requires Node 18+ and npm.
+All build and setup instructions live in [`android/README.md`](./android/README.md). In short: open the `android/` folder as a Gradle project in Android Studio Ladybug (JDK 17), let it sync, and run the `app` configuration.
+
+CLI:
 
 ```bash
-npm install
-npm run dev         # http://localhost:3000
-npm run typecheck
-npm test
-npm run build       # static export to ./out
+cd android
+./gradlew :app:assembleDebug
+./gradlew :app:installDebug
+./gradlew :app:testDebugUnitTest
 ```
 
-## Project layout
+## Layout
 
 ```
-src/
-  app/            # Next.js App Router entry points (dashboard, profile)
-  components/     # UI primitives + feature components
-  domain/         # Types, rules, labels, zod schemas
-  hooks/          # useHydrate, useUndo, useHotkeys
-  lib/            # Small utilities: id, cn, io (import/export)
-  store/          # zustand store, IndexedDB persistence, selectors
-tests/            # Vitest unit tests
-public/           # manifest, icons, service worker
+android/                    # Gradle project root
+  app/
+    src/main/kotlin/io/crimsonledger/
+      domain/               # Model, Rules, Labels, Defaults — pure Kotlin
+      data/                 # Room entity, DAO, repository, JSON IO
+      ui/                   # ViewModel, navigation, undo, Compose screens + components
+    src/test/kotlin/        # JVM unit tests (rules + JSON roundtrip)
+    src/main/res/           # themes, colors, adaptive icon, backup rules
+  gradle/                   # version catalog + wrapper
+.github/workflows/          # Android CI
+LICENSE
 ```
 
-## Architecture at a glance
+## Web PWA (archived)
 
-- **State** — single `useLedgerStore` zustand store. Every mutation snapshots the profile it touched so the last action can be undone. Snapshots expire after 15 s.
-- **Persistence** — IndexedDB via `idb-keyval`; hydrated once on client mount. A tiny `localStorage` key remembers the last-opened profile.
-- **Rendering** — fully client-side (`output: 'export'`), no server. The profile page reads the active id from `?id=...` so it works with a static export.
-- **PWA** — `manifest.webmanifest` + a minimal cache-first service worker registered only in production builds.
-- **Engine/UI separation** — internal fields are generic (`thirst`, `morality`, `marks`); the UI layer translates them through `src/domain/labels.ts`. Swap in a different label map to rebrand for another system.
-
-## Data model (generic engine, V5 labels)
-
-```ts
-type Profile = {
-  id: string;
-  name: string;
-  chronicle?: string;
-  thirst: number;     // Hunger, 0–5
-  morality: number;   // Humanity, 0–10
-  marks: number;      // Stains, 0–10
-  health: { max: number; superficial: number; aggravated: number };
-  willpower: { max: number; superficial: number; aggravated: number };
-  conditions: { id: string; label: string; note?: string }[];
-  customTrackers: {
-    id: string; label: string; currentValue: number;
-    maxValue?: number; displayType: 'counter' | 'pips' | 'checklist';
-    items?: string[];
-  }[];
-  shortNotes: string;
-  archived: boolean;
-  createdAt: number;
-  updatedAt: number;
-};
-```
-
-JSON export envelope:
-
-```json
-{ "version": 1, "exportedAt": 1710000000000, "profiles": [/* Profile[] */] }
-```
-
-Imports are validated with `zod`; malformed files are rejected before touching state.
+This project briefly shipped an offline-first Next.js PWA alongside the native Android build. The web code is preserved on the `web-archive` branch; `main` is Android-only. If you ever need to bring the PWA back, branch from `web-archive` and cherry-pick the relevant commits.
 
 ## Roadmap
 
 - **v1.1** – Multi-step undo/redo with a timeline view
 - **v1.2** – Custom presets for CofD, Werewolf, and homebrew label sets
-- **v1.3** – Opt-in cloud sync (end-to-end encrypted)
-- **v1.4** – Hunger-dice roller module
-- **v1.5** – i18n (`fr`, `es`, `pt-BR`, `de`)
-- **v1.6** – Storyteller overview + encrypted share links
-- **v1.7** – Accessibility audit, reduced-motion polish, haptic patterns
+- **v1.3** – Hunger-dice roller module
+- **v1.4** – i18n (`fr`, `es`, `pt-BR`, `de`)
+- **v1.5** – Storyteller overview + encrypted share links
+- **v1.6** – Accessibility audit, reduced-motion polish, haptic patterns
 
 ## License
 
@@ -118,7 +80,7 @@ No trademarked names, logos, or art from White Wolf / Renegade Game Studios / Pa
 Issues and pull requests are welcome. Please:
 
 1. Open an issue describing the change before large work.
-2. Keep PRs focused and run `npm run typecheck && npm test` before submitting.
+2. Keep PRs focused and run `./gradlew :app:testDebugUnitTest :app:assembleDebug` before submitting.
 3. Match the existing code style — no new tools or dependencies without discussion.
 
 ## Disclaimer
