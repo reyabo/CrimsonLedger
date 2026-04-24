@@ -105,35 +105,35 @@ android/
 - Export uses `CreateDocument`/`OpenDocument` so it plays nicely with
   scoped storage; no runtime storage permission is needed.
 
-## Why a branch, not a fork
+## Why a single branch
+
+Web and Android live together on `main`. The two codebases don't share
+a build system but they do share a rule set (`src/domain/rules.ts` ↔
+`android/app/…/domain/Rules.kt`); keeping them on the same branch means
+a rule change can touch both sides in one PR.
 
 - One license, one issue tracker, one changelog.
-- Shared domain logic reference between web TS and Kotlin — PRs can update
-  both sides together.
-- The entire Android project is under `android/` so merges from `main` (web
-  changes) never touch Android files.
-
-## Cross-merge ritual
-
-When web changes land on `main` (rule tweaks, schema version bumps, new
-features worth mirroring), pull them into `android`:
-
-```bash
-git checkout android
-git fetch origin
-git merge --no-ff origin/main
-# Conflicts should be impossible: all Android code lives under android/,
-# all web code lives at the repo root. If you see one, something moved —
-# resolve it deliberately and note it in the merge commit.
-./gradlew :app:testDebugUnitTest
-git push origin android
-```
-
-Going the other direction (Android → main) is almost never needed; the web
-app doesn't depend on anything under `android/`.
+- The web root (`package.json`, `src/`, `public/`) and the Android
+  module (`android/`) never overlap, so changes to one don't affect the
+  other's build.
 
 ## CI
 
 `.github/workflows/android.yml` runs `./gradlew :app:testDebugUnitTest
-:app:assembleDebug` on pushes and PRs that touch `android/`. The debug APK
-is uploaded as an artifact on every successful run.
+:app:assembleDebug` whenever a push or PR touches `android/**` or the
+workflow file itself. The debug APK uploads as an artifact on every
+successful run; on failure, a distilled log posts to the PR as a
+comment so the Kotlin compiler errors stay visible without sign-in.
+
+## Keeping rules in sync with the web app
+
+When rules change (clamp bounds, pip-cycle transitions, severity
+thresholds, import schema version), update both sides in the same PR:
+
+- TS: `src/domain/rules.ts`, `src/domain/types.ts`, `src/domain/schema.ts`
+  with the matching `tests/rules.test.ts` / `tests/schema.test.ts`.
+- Kotlin: `android/app/src/main/kotlin/io/crimsonledger/domain/Rules.kt`,
+  `Model.kt`, plus `RulesTest.kt` under `android/app/src/test/`.
+
+The two test suites cover the same cases; if a case passes in one and
+not the other, the rule engines have drifted.
