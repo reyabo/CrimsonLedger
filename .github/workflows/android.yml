@@ -1,0 +1,148 @@
+name: Android CI
+
+on:
+  push:
+    branches: [android]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android.yml'
+  pull_request:
+    paths:
+      - 'android/**'
+      - '.github/workflows/android.yml'
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  build:
+    name: Unit tests + debug assemble
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Unit tests
+        id: unit_tests
+        run: |
+          set -o pipefail
+          ./gradlew :app:testDebugUnitTest --stacktrace 2>&1 | tee -a gradle.log
+
+      - name: Assemble debug
+        id: assemble
+        run: |
+          set -o pipefail
+          ./gradlew :app:assembleDebug --stacktrace 2>&1 | tee -a gradle.log
+
+      - name: Upload build reports (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-reports
+          path: |
+            android/gradle.log
+            android/app/build/reports/
+            android/app/build/outputs/logs/
+          if-no-files-found: ignore
+
+      - name: Extract Kotlin compiler errors
+        if: failure()
+        id: kotlin_errors
+        run: |
+          # Kotlin prints "e: file:/… (line:col): message" for errors and
+          # "w: …" for warnings; grab 2 context lines after each error.
+          grep -n -A 2 -E '^(e:|error:)' gradle.log > kotlin-errors.log || true
+          # Also surface FAILURE blocks that Gradle prints near the end.
+          awk '/^FAILURE:/ {flag=1} flag' gradle.log > gradle-failure.log || true
+          {
+            echo "Kotlin/compiler errors:"
+            echo "-----------------------"
+            if [ -s kotlin-errors.log ]; then
+              cat kotlin-errors.log
+            else
+              echo "(no e:/error: lines matched — failure may be elsewhere)"
+            fi
+            echo ""
+            echo "Gradle FAILURE block:"
+            echo "---------------------"
+            if [ -s gradle-failure.log ]; then
+              head -c 8000 gradle-failure.log
+            else
+              echo "(no FAILURE: block found)"
+            fi
+          } > distilled.log
+
+      - name: Surface failing log as step summary
+        if: failure()
+        run: |
+          {
+            echo "## Gradle failure"
+            echo ""
+            echo '```'
+            cat distilled.log 2>/dev/null || echo "(no distilled.log)"
+            echo '```'
+            echo ""
+            echo "## Last 400 lines of gradle output"
+            echo ""
+            echo '```'
+            tail -n 400 gradle.log 2>/dev/null || echo "(no gradle.log captured)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment failing log on the PR
+        if: failure() && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_REF: ${{ github.ref_name }}
+        run: |
+          PR_NUMBER=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$HEAD_REF" --state open --json number --jq '.[0].number // empty')
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No open PR for $HEAD_REF; skipping comment."
+            exit 0
+          fi
+          DISTILLED=$(cat distilled.log 2>/dev/null || echo "(no distilled.log)")
+          TAIL=$(tail -n 250 gradle.log 2>/dev/null || echo "(no gradle.log captured)")
+          {
+            echo "### CI failed on \`$HEAD_REF\` (commit ${GITHUB_SHA:0:7})"
+            echo ""
+            echo '<details open><summary>Kotlin/compile errors</summary>'
+            echo ''
+            echo '```'
+            echo "$DISTILLED"
+            echo '```'
+            echo '</details>'
+            echo ''
+            echo '<details><summary>Last 250 lines of gradle output</summary>'
+            echo ''
+            echo '```'
+            echo "$TAIL"
+            echo '```'
+            echo '</details>'
+          } | gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file -
+
+      - name: Upload debug APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crimson-ledger-debug.apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn

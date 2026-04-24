@@ -156,7 +156,7 @@ fun ProfileScreen(
             CustomTrackers(
                 trackers = p.customTrackers,
                 onAdd = { label, display, max -> viewModel.addCustomTracker(profileId, label, display, max) },
-                onUpdate = { viewModel.upsertCustomTracker(profileId, it) },
+                onUpdate = { viewModel.updateCustomTrackerValue(profileId, it) },
                 onRemove = { viewModel.removeCustomTracker(profileId, it.id) },
             )
             HorizontalDivider()

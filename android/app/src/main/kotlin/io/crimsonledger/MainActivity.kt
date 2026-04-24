@@ -1,6 +1,5 @@
 package io.crimsonledger
 
-import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -25,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import io.crimsonledger.ui.ImportMode
 import io.crimsonledger.ui.LedgerNavHost
 import io.crimsonledger.ui.LedgerViewModel
@@ -54,16 +54,20 @@ class MainActivity : ComponentActivity() {
 private fun CrimsonLedgerRoot(viewModel: LedgerViewModel) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
 
     var pendingImport by remember { mutableStateOf<String?>(null) }
+    // Holds the encoded JSON between launching the SAF "pick a destination"
+    // flow and its result callback. Remembered so it survives recomposition
+    // but stays scoped to this composition (no top-level global state).
+    val pendingExport = remember { mutableStateOf<String?>(null) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json"),
     ) { uri: Uri? ->
-        val payload = pendingExport ?: return@rememberLauncherForActivityResult
-        pendingExport = null
-        if (uri == null) return@rememberLauncherForActivityResult
+        val payload = pendingExport.value
+        pendingExport.value = null
+        if (uri == null || payload == null) return@rememberLauncherForActivityResult
         scope.launch {
             withContext(Dispatchers.IO) {
                 context.contentResolver.openOutputStream(uri)?.use { it.write(payload.toByteArray()) }
@@ -89,12 +93,12 @@ private fun CrimsonLedgerRoot(viewModel: LedgerViewModel) {
                 viewModel = viewModel,
                 onExportProfile = { id ->
                     viewModel.exportProfile(id)?.let { payload ->
-                        pendingExport = payload
+                        pendingExport.value = payload
                         exportLauncher.launch("crimson-ledger-$id.json")
                     }
                 },
                 onExportAll = {
-                    pendingExport = viewModel.exportAll()
+                    pendingExport.value = viewModel.exportAll()
                     exportLauncher.launch("crimson-ledger.json")
                 },
                 onImport = { importLauncher.launch(arrayOf("application/json")) },
@@ -122,7 +126,3 @@ private fun CrimsonLedgerRoot(viewModel: LedgerViewModel) {
         )
     }
 }
-
-// Lives at top level so the activity-result callback can stash the encoded JSON
-// between the "pick a destination" launch and the "write bytes" callback.
-private var pendingExport: String? = null

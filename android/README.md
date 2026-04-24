@@ -112,3 +112,28 @@ android/
   both sides together.
 - The entire Android project is under `android/` so merges from `main` (web
   changes) never touch Android files.
+
+## Cross-merge ritual
+
+When web changes land on `main` (rule tweaks, schema version bumps, new
+features worth mirroring), pull them into `android`:
+
+```bash
+git checkout android
+git fetch origin
+git merge --no-ff origin/main
+# Conflicts should be impossible: all Android code lives under android/,
+# all web code lives at the repo root. If you see one, something moved —
+# resolve it deliberately and note it in the merge commit.
+./gradlew :app:testDebugUnitTest
+git push origin android
+```
+
+Going the other direction (Android → main) is almost never needed; the web
+app doesn't depend on anything under `android/`.
+
+## CI
+
+`.github/workflows/android.yml` runs `./gradlew :app:testDebugUnitTest
+:app:assembleDebug` on pushes and PRs that touch `android/`. The debug APK
+is uploaded as an artifact on every successful run.
