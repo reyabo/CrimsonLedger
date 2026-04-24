@@ -64,14 +64,47 @@ jobs:
             android/app/build/outputs/logs/
           if-no-files-found: ignore
 
+      - name: Extract Kotlin compiler errors
+        if: failure()
+        id: kotlin_errors
+        run: |
+          # Kotlin prints "e: file:/… (line:col): message" for errors and
+          # "w: …" for warnings; grab 2 context lines after each error.
+          grep -n -A 2 -E '^(e:|error:)' gradle.log > kotlin-errors.log || true
+          # Also surface FAILURE blocks that Gradle prints near the end.
+          awk '/^FAILURE:/ {flag=1} flag' gradle.log > gradle-failure.log || true
+          {
+            echo "Kotlin/compiler errors:"
+            echo "-----------------------"
+            if [ -s kotlin-errors.log ]; then
+              cat kotlin-errors.log
+            else
+              echo "(no e:/error: lines matched — failure may be elsewhere)"
+            fi
+            echo ""
+            echo "Gradle FAILURE block:"
+            echo "---------------------"
+            if [ -s gradle-failure.log ]; then
+              head -c 8000 gradle-failure.log
+            else
+              echo "(no FAILURE: block found)"
+            fi
+          } > distilled.log
+
       - name: Surface failing log as step summary
         if: failure()
         run: |
           {
-            echo "## Gradle failure tail"
+            echo "## Gradle failure"
             echo ""
             echo '```'
-            tail -n 200 gradle.log || echo "(no gradle.log captured)"
+            cat distilled.log 2>/dev/null || echo "(no distilled.log)"
+            echo '```'
+            echo ""
+            echo "## Last 400 lines of gradle output"
+            echo ""
+            echo '```'
+            tail -n 400 gradle.log 2>/dev/null || echo "(no gradle.log captured)"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -86,11 +119,19 @@ jobs:
             echo "No open PR for $HEAD_REF; skipping comment."
             exit 0
           fi
-          TAIL=$(tail -n 120 gradle.log 2>/dev/null || echo "(no gradle.log captured)")
+          DISTILLED=$(cat distilled.log 2>/dev/null || echo "(no distilled.log)")
+          TAIL=$(tail -n 250 gradle.log 2>/dev/null || echo "(no gradle.log captured)")
           {
             echo "### CI failed on \`$HEAD_REF\` (commit ${GITHUB_SHA:0:7})"
             echo ""
-            echo '<details><summary>Last 120 lines of gradle output</summary>'
+            echo '<details open><summary>Kotlin/compile errors</summary>'
+            echo ''
+            echo '```'
+            echo "$DISTILLED"
+            echo '```'
+            echo '</details>'
+            echo ''
+            echo '<details><summary>Last 250 lines of gradle output</summary>'
             echo ''
             echo '```'
             echo "$TAIL"
