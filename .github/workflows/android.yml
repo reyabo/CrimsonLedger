@@ -7,7 +7,6 @@ on:
       - 'android/**'
       - '.github/workflows/android.yml'
   pull_request:
-    branches: [android]
     paths:
       - 'android/**'
       - '.github/workflows/android.yml'
@@ -15,6 +14,10 @@ on:
 concurrency:
   group: android-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
   build:
@@ -39,10 +42,61 @@ jobs:
         run: chmod +x gradlew
 
       - name: Unit tests
-        run: ./gradlew :app:testDebugUnitTest --stacktrace
+        id: unit_tests
+        run: |
+          set -o pipefail
+          ./gradlew :app:testDebugUnitTest --stacktrace 2>&1 | tee -a gradle.log
 
       - name: Assemble debug
-        run: ./gradlew :app:assembleDebug --stacktrace
+        id: assemble
+        run: |
+          set -o pipefail
+          ./gradlew :app:assembleDebug --stacktrace 2>&1 | tee -a gradle.log
+
+      - name: Upload build reports (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-reports
+          path: |
+            android/gradle.log
+            android/app/build/reports/
+            android/app/build/outputs/logs/
+          if-no-files-found: ignore
+
+      - name: Surface failing log as step summary
+        if: failure()
+        run: |
+          {
+            echo "## Gradle failure tail"
+            echo ""
+            echo '```'
+            tail -n 200 gradle.log || echo "(no gradle.log captured)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment failing log on the PR
+        if: failure() && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_REF: ${{ github.ref_name }}
+        run: |
+          PR_NUMBER=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$HEAD_REF" --state open --json number --jq '.[0].number // empty')
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No open PR for $HEAD_REF; skipping comment."
+            exit 0
+          fi
+          TAIL=$(tail -n 120 gradle.log 2>/dev/null || echo "(no gradle.log captured)")
+          {
+            echo "### CI failed on \`$HEAD_REF\` (commit ${GITHUB_SHA:0:7})"
+            echo ""
+            echo '<details><summary>Last 120 lines of gradle output</summary>'
+            echo ''
+            echo '```'
+            echo "$TAIL"
+            echo '```'
+            echo '</details>'
+          } | gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file -
 
       - name: Upload debug APK
         if: success()
