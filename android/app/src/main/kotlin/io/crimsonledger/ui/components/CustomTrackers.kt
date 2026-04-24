@@ -17,6 +17,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MenuAnchorType
@@ -205,7 +206,9 @@ private fun AddTrackerDialog(onDismiss: () -> Unit, onConfirm: (String, CustomTr
                             .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                             .fillMaxWidth(),
                     )
-                    androidx.compose.material3.ExposedDropdownMenu(expanded = dropdown, onDismissRequest = { dropdown = false }) {
+                    // ExposedDropdownMenu is an extension on ExposedDropdownMenuBoxScope,
+                    // so it's only resolvable by its simple name inside this lambda.
+                    ExposedDropdownMenu(expanded = dropdown, onDismissRequest = { dropdown = false }) {
                         CustomTrackerDisplay.values().forEach { option ->
                             DropdownMenuItem(
                                 text = { Text(option.name.lowercase().replaceFirstChar { it.titlecase() }) },
