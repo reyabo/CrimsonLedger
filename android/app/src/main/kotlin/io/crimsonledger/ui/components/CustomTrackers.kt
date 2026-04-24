@@ -19,6 +19,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -200,7 +201,9 @@ private fun AddTrackerDialog(onDismiss: () -> Unit, onConfirm: (String, CustomTr
                         onValueChange = {},
                         label = { Text("Display") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdown) },
-                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        modifier = Modifier
+                            .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                            .fillMaxWidth(),
                     )
                     androidx.compose.material3.ExposedDropdownMenu(expanded = dropdown, onDismissRequest = { dropdown = false }) {
                         CustomTrackerDisplay.values().forEach { option ->

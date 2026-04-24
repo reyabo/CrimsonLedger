@@ -9,7 +9,7 @@ import androidx.room.TypeConverters
 @Database(
     entities = [ProfileEntity::class],
     version = 1,
-    exportSchema = true,
+    exportSchema = false,
 )
 @TypeConverters(LedgerConverters::class)
 abstract class LedgerDatabase : RoomDatabase() {
