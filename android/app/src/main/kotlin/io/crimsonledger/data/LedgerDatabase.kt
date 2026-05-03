@@ -24,7 +24,8 @@ abstract class LedgerDatabase : RoomDatabase() {
                     context.applicationContext,
                     LedgerDatabase::class.java,
                     "crimson_ledger.db",
-                ).fallbackToDestructiveMigrationOnDowngrade().build().also { instance = it }
+                ).fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
+                    .build().also { instance = it }
             }
     }
 }
